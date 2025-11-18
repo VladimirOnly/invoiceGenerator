@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice Maker (v5.0 - English UI)</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <style>
+        body { background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .invoice-preview {
+            background: white;
+            padding: 40px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+            min-height: 800px;
+            color: #333;
+        }
+        .controls { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        
+        .quick-date-btn { font-size: 0.7rem; padding: 2px 8px; margin-right: 2px; }
+        .hover-bg:hover { background-color: #f8f9fa; }
+
+        @media print {
+            .no-print { display: none !important; }
+            .invoice-preview { box-shadow: none; padding: 0; margin: 0; width: 100%; }
+            body { background: white; }
+            .container { max-width: 100% !important; width: 100%; padding: 0; margin: 0; }
+            .qr-code-box { break-inside: avoid; }
+        }
+        
+        [v-cloak] { display: none; }
+    </style>
+</head>
+<body>
+
+<div id="app" class="container py-4" v-cloak>
+    <div class="row">
+        
+        <div class="col-md-4 no-print">
+            
+            <div class="controls mb-3 border-top border-warning border-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="m-0">📂 History</h5>
+                    <small class="text-muted">{{ savedInvoices.length }} items</small>
+                </div>
+                
+                <div style="max-height: 150px; overflow-y: auto;" class="mb-2">
+                    <div v-for="(inv, index) in savedInvoices" :key="index" class="d-flex justify-content-between align-items-center border-bottom py-1 px-1 hover-bg">
+                        <div @click="loadInvoice(index)" style="cursor: pointer; flex-grow: 1;">
+                            <div class="fw-bold small"># {{ inv.number }}</div>
+                            <div class="text-muted" style="font-size: 0.75rem;">{{ inv.clientName }} ({{ formatDate(inv.date) }})</div>
+                        </div>
+                        <button @click="deleteInvoice(index)" class="btn btn-sm text-danger py-0">×</button>
+                    </div>
+                </div>
+                <button @click="saveInvoiceToHistory" class="btn btn-warning btn-sm w-100">💾 Save Current Invoice</button>
+            </div>
+
+            <div class="controls mb-3">
+                <h5 class="mb-3">Settings</h5>
+                
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="vatSwitch" v-model="isVatPayer">
+                    <label class="form-check-label fw-bold small" for="vatSwitch">VAT Payer (Plátce DPH)</label>
+                </div>
+
+                <label class="small text-muted">Document Type</label>
+                <select v-model="docType" class="form-select form-select-sm mb-2">
+                    <option value="Faktura">Faktura</option>
+                    <option value="Faktura - Daňový doklad" v-if="isVatPayer">Faktura - Daňový doklad</option>
+                    <option value="Zálohová faktura">Zálohová faktura (Proforma)</option>
+                </select>
+
+                <label class="small text-muted">Invoice Number</label>
+                <div class="input-group input-group-sm mb-2">
+                    <span class="input-group-text">#</span>
+                    <input type="text" v-model="invoiceNumber" class="form-control">
+                </div>
+
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="small text-muted">Date of Issue</label>
+                        <input type="date" v-model="dates.issued" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted">Due Date</label>
+                        <input type="date" v-model="dates.due" class="form-control form-control-sm">
+                    </div>
+                </div>
+                
+                <div class="mb-3 text-end">
+                    <button class="btn btn-outline-secondary quick-date-btn" @click="addDays(3)">+3</button>
+                    <button class="btn btn-outline-secondary quick-date-btn" @click="addDays(7)">+7</button>
+                    <button class="btn btn-outline-secondary quick-date-btn" @click="addDays(14)">+14</button>
+                    <button class="btn btn-outline-secondary quick-date-btn" @click="addDays(30)">+30</button>
+                </div>
+                
+                <label class="small text-muted">Payment Method</label>
+                <select v-model="paymentMethod" class="form-select form-select-sm">
+                    <option value="Převodem">Bank Transfer (Převodem)</option>
+                    <option value="Hotově">Cash (Hotově)</option>
+                </select>
+            </div>
+
+            <div class="controls mb-3">
+                <h5 class="mb-2">Supplier (You)</h5>
+                <div class="input-group input-group-sm mb-1">
+                    <input type="text" v-model="supplier.ico" placeholder="ICO (Reg. No)" class="form-control">
+                    <button @click="fetchAres('supplier')" class="btn btn-outline-primary">Load (ARES)</button>
+                </div>
+                <textarea v-model="supplier.details" rows="3" class="form-control form-control-sm mb-2" placeholder="Name, Address, VAT ID..."></textarea>
+                
+                <div v-if="paymentMethod === 'Převodem'" class="bg-light p-2 rounded border">
+                    <input type="text" v-model="supplier.iban" placeholder="IBAN (CZ...)" class="form-control form-control-sm mb-1">
+                    <input type="text" v-model="supplier.swift" placeholder="SWIFT / BIC" class="form-control form-control-sm">
+                </div>
+            </div>
+
+            <div class="controls mb-3">
+                <h5 class="mb-2">Client (Customer)</h5>
+                <div class="input-group input-group-sm mb-1">
+                    <input type="text" v-model="customer.ico" placeholder="Client ICO" class="form-control">
+                    <button @click="fetchAres('customer')" class="btn btn-outline-primary">Load (ARES)</button>
+                </div>
+                <textarea v-model="customer.details" rows="3" class="form-control form-control-sm" placeholder="Client Name & Address..."></textarea>
+            </div>
+
+            <div class="controls">
+                <h5 class="mb-2">Items</h5>
+                <div v-for="(item, index) in items" :key="index" class="border-bottom pb-2 mb-2">
+                    <div class="d-flex mb-1">
+                        <input v-model="item.name" class="form-control form-control-sm me-1" placeholder="Item Name / Description">
+                        <button @click="removeItem(index)" class="btn btn-sm btn-outline-danger">×</button>
+                    </div>
+                    <div class="row g-1">
+                        <div class="col-3">
+                            <label class="small text-muted" v-if="index===0">Qty</label>
+                            <input type="number" v-model.number="item.qty" class="form-control form-control-sm" placeholder="Qty">
+                        </div>
+                        <div class="col-2">
+                            <label class="small text-muted" v-if="index===0">Unit</label>
+                            <input type="text" v-model="item.unit" class="form-control form-control-sm" placeholder="ks">
+                        </div>
+                        <div class="col-3">
+                            <label class="small text-muted" v-if="index===0">Price</label>
+                            <input type="number" v-model.number="item.price" class="form-control form-control-sm" placeholder="Price">
+                        </div>
+                         <div class="col-2">
+                            <label class="small text-muted" v-if="index===0">Disc %</label>
+                            <input type="number" v-model.number="item.discountPercent" class="form-control form-control-sm text-danger" placeholder="%">
+                        </div>
+                        <div class="col-2" v-if="isVatPayer">
+                            <label class="small text-muted" v-if="index===0">VAT</label>
+                            <select v-model.number="item.vat" class="form-select form-select-sm px-0">
+                                <option value="0">0</option>
+                                <option value="12">12</option>
+                                <option value="21">21</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <button @click="addItem" class="btn btn-sm btn-success w-100 mt-2">+ Add Item</button>
+                
+                <div class="mt-3 border-top pt-2">
+                    <label class="small fw-bold">Global Discount (Kč off Total)</label>
+                    <input type="number" v-model.number="globalDiscount" class="form-control form-control-sm" placeholder="0">
+                </div>
+            </div>
+
+            <button onclick="window.print()" class="btn btn-primary w-100 mt-4 fw-bold">🖨 PRINT / PDF</button>
+            
+            <div class="mt-5 text-center">
+                <button @click="hardReset" class="btn btn-link text-danger btn-sm" style="font-size: 10px;">⚠️ Reset Everything</button>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="invoice-preview">
+                <div class="d-flex justify-content-between align-items-start mb-5">
+                    <h1 class="display-6 fw-bold">{{ docType }}</h1>
+                    <div class="text-end">
+                        <h3 class="fw-light">Číslo: <b>{{ invoiceNumber }}</b></h3>
+                    </div>
+                </div>
+
+                <div class="row mb-4">
+                    <div class="col-6">
+                        <h6 class="text-uppercase text-muted small fw-bold mb-2">Dodavatel</h6>
+                        <div style="white-space: pre-wrap; font-size: 1.1rem;">{{ supplier.details }}</div>
+                        
+                        <div v-if="!isVatPayer" class="mt-2 fst-italic text-muted small">Nejsem plátce DPH</div>
+                        
+                        <div v-if="paymentMethod === 'Převodem' && supplier.iban" class="mt-3 p-3 bg-light rounded">
+                            <div class="mb-1"><strong>IBAN:</strong> <span class="font-monospace">{{ supplier.iban }}</span></div>
+                            <div v-if="supplier.swift"><strong>SWIFT:</strong> {{ supplier.swift }}</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <h6 class="text-uppercase text-muted small fw-bold mb-2">Odběratel</h6>
+                        <div style="white-space: pre-wrap; font-size: 1.1rem;">{{ customer.details }}</div>
+                    </div>
+                </div>
+
+                <div class="row border-top border-bottom py-3 mb-4">
+                    <div class="col-4">
+                        <div class="small text-muted text-uppercase">Datum vystavení</div>
+                        <div class="fw-bold fs-5">{{ formatDate(dates.issued) }}</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="small text-muted text-uppercase">Datum splatnosti</div>
+                        <div class="fw-bold fs-5">{{ formatDate(dates.due) }}</div>
+                    </div>
+                    <div class="col-4">
+                        <div class="small text-muted text-uppercase">Forma úhrady</div>
+                        <div class="fw-bold fs-5">{{ paymentMethod }}</div>
+                    </div>
+                    <div class="col-12 mt-2" v-if="isVatPayer">
+                        <small class="text-muted">DUZP: {{ formatDate(dates.issued) }}</small>
+                    </div>
+                </div>
+
+                <table class="table table-hover align-middle mb-4">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col" class="border-0 ps-3">Položka</th>
+                            <th scope="col" class="text-end border-0">Množství</th>
+                            <th scope="col" class="text-end border-0">Cena/j.</th>
+                            <th scope="col" class="text-end border-0">Sleva</th>
+                            <th scope="col" class="text-end border-0" v-if="isVatPayer">DPH</th>
+                            <th scope="col" class="text-end border-0 pe-3">Celkem</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="item in items">
+                            <td class="ps-3 fw-500">{{ item.name }}</td>
+                            <td class="text-end text-muted">{{ item.qty }} {{ item.unit }}</td>
+                            <td class="text-end">{{ formatMoney(item.price) }}</td>
+                            <td class="text-end text-muted">
+                                <span v-if="item.discountPercent > 0" class="badge bg-light text-dark border">{{ item.discountPercent }}%</span>
+                                <span v-else>-</span>
+                            </td>
+                            <td class="text-end text-muted" v-if="isVatPayer">{{ item.vat }}%</td>
+                            
+                            <td class="text-end fw-bold pe-3">
+                                {{ formatMoney(item.qty * item.price * (1 - item.discountPercent/100)) }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="row">
+                    <div class="col-6"></div>
+                    <div class="col-6">
+                        <table class="table table-sm table-borderless">
+                            <template v-if="!isVatPayer">
+                                <tr v-if="globalDiscount > 0">
+                                    <td>Mezisoučet (po slevách položek):</td>
+                                    <td class="text-end">{{ formatMoney(totals.subtotal) }}</td>
+                                </tr>
+                                <tr v-if="globalDiscount > 0" class="text-danger">
+                                    <td>Celková sleva:</td>
+                                    <td class="text-end">- {{ formatMoney(globalDiscount) }}</td>
+                                </tr>
+                                <tr class="border-top border-dark fs-4 fw-bold">
+                                    <td class="pt-3">Celkem k úhradě:</td>
+                                    <td class="text-end pt-3">{{ formatMoney(totals.total) }}</td>
+                                </tr>
+                            </template>
+
+                            <template v-else>
+                                <tr>
+                                    <td class="text-muted">Základ (po slevách položek):</td>
+                                    <td class="text-end">{{ formatMoney(totals.subtotal) }}</td>
+                                </tr>
+                                <tr v-if="globalDiscount > 0" class="text-danger">
+                                    <td>Celková sleva (bez DPH):</td>
+                                    <td class="text-end">- {{ formatMoney(globalDiscount) }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">DPH celkem:</td>
+                                    <td class="text-end">{{ formatMoney(totals.vatTotal) }}</td>
+                                </tr>
+                                <tr class="border-top border-dark fs-4 fw-bold">
+                                    <td class="pt-3">Celkem s DPH:</td>
+                                    <td class="text-end pt-3">{{ formatMoney(totals.total) }}</td>
+                                </tr>
+                            </template>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="qr-code-box mt-4 d-flex align-items-center justify-content-end" v-if="paymentMethod === 'Převodem' && qrCodeData">
+                    <div class="me-3 text-end text-muted small lh-1">
+                        <div>QR Platba</div>
+                        <div>Skenovat v bankovnictví</div>
+                    </div>
+                    <div class="border p-2 bg-white rounded">
+                        <canvas id="qrCanvas"></canvas>
+                    </div>
+                </div>
+
+                <div class="mt-5 pt-4 border-top text-center text-muted small">
+                    Faktura vystavena elektronicky.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const { createApp } = Vue;
+
+    createApp({
+        data() {
+            return {
+                isVatPayer: false,
+                paymentMethod: 'Převodem',
+                docType: 'Faktura',
+                invoiceNumber: new Date().getFullYear() + '001',
+                dates: {
+                    issued: new Date().toISOString().split('T')[0],
+                    due: ''
+                },
+                supplier: {
+                    ico: '',
+                    details: '',
+                    iban: '',
+                    swift: ''
+                },
+                customer: {
+                    ico: '',
+                    details: ''
+                },
+                items: [
+                    { name: 'Service / Služba', qty: 1, unit: 'ks', price: 1000, discountPercent: 0, vat: 0 }
+                ],
+                globalDiscount: 0,
+                savedInvoices: []
+            }
+        },
+        mounted() {
+            try {
+                // Changed keys to v5 to avoid conflicts with previous data structures
+                const loadSafe = (key) => {
+                    const data = localStorage.getItem(key);
+                    return data ? JSON.parse(data) : null;
+                };
+
+                this.savedInvoices = loadSafe('app_invoices_v5') || [];
+                
+                const savedSupplier = loadSafe('app_supplier_v5');
+                if (savedSupplier) this.supplier = savedSupplier;
+
+                const savedVat = localStorage.getItem('app_vat_v5');
+                if (savedVat !== null) this.isVatPayer = (savedVat === 'true');
+
+                this.addDays(14);
+            } catch (e) {
+                console.error("Load error", e);
+            }
+        },
+        computed: {
+            totals() {
+                let subtotal = 0;
+                let vatTotal = 0;
+
+                this.items.forEach(item => {
+                    // Calculate line total AFTER item discount
+                    const discountMultiplier = 1 - (item.discountPercent || 0) / 100;
+                    const linePrice = item.price * discountMultiplier;
+                    const lineTotal = item.qty * linePrice;
+                    
+                    subtotal += lineTotal;
+                    
+                    if (this.isVatPayer) {
+                        vatTotal += lineTotal * (item.vat / 100);
+                    }
+                });
+
+                // Apply global discount to the Base (Subtotal)
+                // Note: In simple accounting, global discount often reduces the base.
+                // VAT is then calculated on the reduced base, but here we calculated VAT on lines.
+                // To keep it simple and mathematically approximate for this tool:
+                // We treat globalDiscount as a net reduction of the Final Total (or Base).
+                
+                let total;
+                
+                if (this.isVatPayer) {
+                    // VAT Logic: 
+                    // We assume Global Discount is "Excl. VAT". 
+                    // So we subtract Global Discount from Subtotal. 
+                    // Then we need to adjust VAT? 
+                    // To simplify: Let's subtract Global Discount from the Base, and re-calculate total VAT based on average rate?
+                    // EASIER WAY for this tool: Subtract Global Discount from the FINAL sum (Net).
+                    
+                    // Let's stick to: Base - GlobalDiscount = NewBase. Then NewBase + VAT = Total.
+                    // But we already summed VAT from lines.
+                    
+                    // Correct simplified approach: 
+                    // Total = (Subtotal - GlobalDiscount) + VAT_of_Subtotal? No, VAT decreases too.
+                    
+                    // Implementation: Global Discount is deducted from the Base. 
+                    // VAT remains as calculated from lines (State gets full VAT), user gives discount from his margin.
+                    total = subtotal + vatTotal - this.globalDiscount;
+                } else {
+                    total = subtotal - this.globalDiscount;
+                    vatTotal = 0;
+                }
+                
+                return {
+                    subtotal: subtotal,
+                    vatTotal: vatTotal,
+                    total: total > 0 ? total : 0
+                };
+            },
+            qrCodeData() {
+                if (this.paymentMethod !== 'Převodem' || !this.supplier.iban || this.totals.total <= 0) return null;
+                const amount = this.totals.total.toFixed(2);
+                const msg = `FA ${this.invoiceNumber}`;
+                let s = `SPD*1.0*ACC:${this.supplier.iban}`;
+                if(this.supplier.swift) s += `+${this.supplier.swift}`;
+                s += `*AM:${amount}*CC:CZK*MSG:${msg}`;
+                return s;
+            }
+        },
+        watch: {
+            qrCodeData: {
+                immediate: true,
+                handler(val) {
+                    if (val) this.$nextTick(() => this.generateQrCode(val));
+                }
+            },
+            supplier: {
+                handler(val) { localStorage.setItem('app_supplier_v5', JSON.stringify(val)); },
+                deep: true
+            },
+            isVatPayer(val) {
+                localStorage.setItem('app_vat_v5', val);
+                this.items.forEach(i => i.vat = val ? 21 : 0);
+                if(val) this.docType = 'Faktura - Daňový doklad';
+                else this.docType = 'Faktura';
+            }
+        },
+        methods: {
+            addDays(days) {
+                if(!this.dates.issued) return;
+                const d = new Date(this.dates.issued);
+                d.setDate(d.getDate() + days);
+                this.dates.due = d.toISOString().split('T')[0];
+            },
+            addItem() {
+                this.items.push({ name: '', qty: 1, unit: 'ks', price: 0, discountPercent: 0, vat: this.isVatPayer ? 21 : 0 });
+            },
+            removeItem(idx) {
+                this.items.splice(idx, 1);
+            },
+            formatMoney(val) {
+                return new Intl.NumberFormat('cs-CZ', { style: 'currency', currency: 'CZK', minimumFractionDigits: 0 }).format(val);
+            },
+            formatDate(d) {
+                if(!d) return '';
+                const [y, m, day] = d.split('-');
+                return `${day}.${m}.${y}`;
+            },
+            async fetchAres(target) {
+                const ico = target === 'supplier' ? this.supplier.ico : this.customer.ico;
+                if (!ico || ico.length < 8) { alert('Enter 8 digits ICO'); return; }
+                
+                try {
+                    const res = await fetch(`https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/ekonomicke-subjekty/${ico}`);
+                    if (!res.ok) throw new Error();
+                    const d = await res.json();
+                    let txt = `${d.obchodniJmeno}\n${d.sidlo.textovaAdresa}\nIČ: ${ico}`;
+                    if(d.dic) txt += `\nDIČ: ${d.dic}`;
+                    
+                    if (target === 'supplier') this.supplier.details = txt;
+                    else this.customer.details = txt;
+                } catch (e) {
+                    alert('ARES Error (Check CORS or ID)');
+                }
+            },
+            saveInvoiceToHistory() {
+                try {
+                    const snapshot = {
+                        number: this.invoiceNumber,
+                        clientName: this.customer.details.split('\n')[0] || 'No Name',
+                        date: this.dates.issued,
+                        fullData: {
+                            docType: this.docType,
+                            invoiceNumber: this.invoiceNumber,
+                            dates: {...this.dates},
+                            customer: {...this.customer},
+                            items: JSON.parse(JSON.stringify(this.items)),
+                            globalDiscount: this.globalDiscount,
+                            paymentMethod: this.paymentMethod
+                        }
+                    };
+                    
+                    const idx = this.savedInvoices.findIndex(i => i.number === this.invoiceNumber);
+                    if (idx >= 0) {
+                        if(confirm('Overwrite existing?')) this.savedInvoices[idx] = snapshot;
+                    } else {
+                        this.savedInvoices.unshift(snapshot);
+                    }
+                    localStorage.setItem('app_invoices_v5', JSON.stringify(this.savedInvoices));
+                } catch (e) {
+                    alert("Save failed");
+                }
+            },
+            loadInvoice(idx) {
+                const d = this.savedInvoices[idx].fullData;
+                this.docType = d.docType;
+                this.invoiceNumber = d.invoiceNumber;
+                this.dates = d.dates;
+                this.customer = d.customer;
+                this.items = d.items;
+                this.globalDiscount = d.globalDiscount || 0;
+                this.paymentMethod = d.paymentMethod || 'Převodem';
+            },
+            deleteInvoice(idx) {
+                if(confirm('Delete?')) {
+                    this.savedInvoices.splice(idx, 1);
+                    localStorage.setItem('app_invoices_v5', JSON.stringify(this.savedInvoices));
+                }
+            },
+            hardReset() {
+                if(confirm('Factory Reset?')) {
+                    localStorage.clear();
+                    location.reload();
+                }
+            },
+            generateQrCode(val) {
+                if(typeof QRious === 'undefined') return;
+                const canvas = document.getElementById('qrCanvas');
+                if(canvas) new QRious({ element: canvas, value: val, size: 130 });
+            }
+        }
+    }).mount('#app');
+</script>
+
+</body>
+</html>
