@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Invoice Maker (v7.5 - Compact & Clean)</title>
+    <title>Invoice Maker (v7.6 - Fixed Payment Method)</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -35,7 +35,7 @@
         }
         
         .address-text { 
-            font-size: 0.9rem; /* Reduced font size for addresses */
+            font-size: 0.9rem; 
             line-height: 1.4; 
             white-space: pre-wrap; 
         }
@@ -59,25 +59,11 @@
         input[type=number]::-webkit-inner-spin-button, 
         input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         
-        /* --- PRINT RULES (The Magic) --- */
+        /* --- PRINT RULES --- */
         @media print {
-            /* 1. Hide sidebar */
             .no-print { display: none !important; }
-            
-            /* 2. Remove Browser Headers/Footers (Date, URL, Title) */
-            @page { 
-                margin: 0; /* Kills browser headers */
-                size: auto; 
-            }
-            
-            /* 3. Setup Paper Layout */
-            body { 
-                background: white; 
-                margin: 0;
-                padding: 15mm; /* Manual margins so text isn't at edge */
-                -webkit-print-color-adjust: exact; 
-            }
-            
+            @page { margin: 0; size: auto; }
+            body { background: white; margin: 0; padding: 15mm; -webkit-print-color-adjust: exact; }
             .container { max-width: 100% !important; width: 100%; padding: 0; margin: 0; }
             .invoice-preview { box-shadow: none; padding: 0; margin: 0; width: 100%; min-height: auto; }
             .qr-code-box { break-inside: avoid; }
@@ -111,21 +97,25 @@
 
             <div class="controls mb-3">
                 <h5 class="mb-3">Settings</h5>
+                
                 <div class="form-check form-switch mb-2">
                     <input class="form-check-input" type="checkbox" id="vatSwitch" v-model="isVatPayer">
                     <label class="form-check-label fw-bold small" for="vatSwitch">VAT Payer (Plátce DPH)</label>
                 </div>
+                
                 <label class="small text-muted">Document Type</label>
                 <select v-model="docType" class="form-select form-select-sm mb-2">
                     <option value="Faktura">Faktura</option>
                     <option value="Faktura - Daňový doklad" v-if="isVatPayer">Faktura - Daňový doklad</option>
                     <option value="Zálohová faktura">Zálohová faktura (Proforma)</option>
                 </select>
+                
                 <label class="small text-muted">Invoice Number</label>
                 <div class="input-group input-group-sm mb-2">
                     <span class="input-group-text">#</span>
                     <input type="text" v-model="invoiceNumber" class="form-control">
                 </div>
+                
                 <div class="row g-2 mb-2">
                     <div class="col-6">
                         <label class="small text-muted">Issue Date</label>
@@ -136,12 +126,19 @@
                         <input type="date" v-model="dates.due" class="form-control form-control-sm">
                     </div>
                 </div>
-                <div class="mb-2 text-end">
+                
+                <div class="mb-3 text-end">
                     <button class="btn btn-outline-secondary quick-date-btn" @click="addDays(3)">+3</button>
                     <button class="btn btn-outline-secondary quick-date-btn" @click="addDays(7)">+7</button>
                     <button class="btn btn-outline-secondary quick-date-btn" @click="addDays(14)">+14</button>
                     <button class="btn btn-outline-secondary quick-date-btn" @click="addDays(30)">+30</button>
                 </div>
+
+                <label class="small text-muted">Payment Method</label>
+                <select v-model="paymentMethod" class="form-select form-select-sm">
+                    <option value="Převodem">Bank Transfer (Převodem)</option>
+                    <option value="Hotově">Cash (Hotově)</option>
+                </select>
             </div>
 
             <div class="controls mb-3">
@@ -151,10 +148,12 @@
                     <button @click="fetchAres('supplier')" class="btn btn-outline-primary">ARES</button>
                 </div>
                 <textarea v-model="supplier.details" rows="2" class="form-control form-control-sm mb-2" placeholder="Details..."></textarea>
-                <div class="bg-light p-2 rounded border mb-3">
+                
+                <div v-if="paymentMethod === 'Převodem'" class="bg-light p-2 rounded border mb-3">
                     <input type="text" v-model="supplier.iban" placeholder="IBAN" class="form-control form-control-sm mb-1">
                     <input type="text" v-model="supplier.swift" placeholder="SWIFT" class="form-control form-control-sm">
                 </div>
+                
                 <h5 class="mb-2">Client</h5>
                 <div class="input-group input-group-sm mb-1">
                     <input type="text" v-model="customer.ico" placeholder="Client ICO" class="form-control">
@@ -208,7 +207,8 @@
                         <div class="address-title">Dodavatel</div>
                         <div class="address-text">{{ supplier.details }}</div>
                         <div v-if="!isVatPayer" class="mt-1 fst-italic small text-muted">Nejsem plátce DPH</div>
-                        <div v-if="supplier.iban" class="bank-box">
+                        
+                        <div v-if="paymentMethod === 'Převodem' && supplier.iban" class="bank-box">
                             <div>IBAN: <b>{{ supplier.iban }}</b></div>
                             <div v-if="supplier.swift">SWIFT: {{ supplier.swift }}</div>
                         </div>
@@ -230,7 +230,7 @@
                     </div>
                     <div class="col-4">
                         <div class="small text-muted text-uppercase" style="font-size: 0.7rem;">Forma úhrady</div>
-                        <div class="fw-bold">Převodem</div>
+                        <div class="fw-bold">{{ paymentMethod }}</div>
                     </div>
                     <div class="col-12 mt-1" v-if="isVatPayer">
                         <small class="text-muted" style="font-size: 0.7rem;">DUZP: {{ formatDate(dates.issued) }}</small>
@@ -286,7 +286,7 @@
                     </div>
                 </div>
 
-                <div class="qr-code-box mt-4 d-flex align-items-center justify-content-end" v-if="supplier.iban && totals.total > 0">
+                <div class="qr-code-box mt-4 d-flex align-items-center justify-content-end" v-if="paymentMethod === 'Převodem' && supplier.iban && totals.total > 0">
                     <div class="me-3 text-end text-muted small lh-1">
                         <div>QR Platba</div>
                         <div>Skenovat v bankovnictví</div>
@@ -307,7 +307,7 @@
     createApp({
         data() {
             return {
-                isVatPayer: false, docType: 'Faktura', invoiceNumber: new Date().getFullYear() + '001',
+                isVatPayer: false, docType: 'Faktura', paymentMethod: 'Převodem', invoiceNumber: new Date().getFullYear() + '001',
                 dates: { issued: new Date().toISOString().split('T')[0], due: '' },
                 supplier: { ico: '', details: '', iban: '', swift: '' },
                 customer: { ico: '', details: '' },
@@ -337,7 +337,7 @@
                 return { subtotal, vatTotal, total: total > 0 ? total : 0 };
             },
             qrCodeData() {
-                if (!this.supplier.iban || this.totals.total <= 0) return null;
+                if (this.paymentMethod !== 'Převodem' || !this.supplier.iban || this.totals.total <= 0) return null;
                 const am = this.totals.total.toFixed(2);
                 let s = `SPD*1.0*ACC:${this.supplier.iban}`;
                 if(this.supplier.swift) s += `+${this.supplier.swift}`;
@@ -382,7 +382,8 @@
             },
             saveInvoiceToHistory() {
                  const snap = { number: this.invoiceNumber, clientName: this.customer.details.split('\n')[0], date: this.dates.issued, fullData: JSON.parse(JSON.stringify({
-                     docType: this.docType, invoiceNumber: this.invoiceNumber, dates: this.dates, customer: this.customer, items: this.items, globalDiscount: this.globalDiscount
+                     docType: this.docType, paymentMethod: this.paymentMethod, // Saved!
+                     invoiceNumber: this.invoiceNumber, dates: this.dates, customer: this.customer, items: this.items, globalDiscount: this.globalDiscount
                  }))};
                  const idx = this.savedInvoices.findIndex(i => i.number === this.invoiceNumber);
                  if(idx >= 0) { if(confirm('Overwrite?')) this.savedInvoices[idx] = snap; } else this.savedInvoices.unshift(snap);
@@ -390,6 +391,7 @@
             },
             loadInvoice(i) {
                 const d = this.savedInvoices[i].fullData; Object.assign(this, d);
+                if(!this.paymentMethod) this.paymentMethod = 'Převodem'; // Fallback
                 if(!this.items[0].discountType) this.items.forEach(it => { it.discountType = 'percent'; it.discountVal = 0; });
                 this.items.forEach(it => { if(!it.unit) it.unit = 'ks'; });
             },
