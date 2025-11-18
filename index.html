@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Invoice Maker (v7.3 - Type Restored)</title>
+    <title>Invoice Maker (v7.5 - Compact & Clean)</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -11,7 +11,7 @@
     <style>
         body { background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         
-        /* Paper Effect */
+        /* --- PREVIEW STYLES (Compact) --- */
         .invoice-preview {
             background: white;
             padding: 40px;
@@ -20,26 +20,66 @@
             color: #333;
         }
         
+        /* Smaller fonts for header info */
+        .invoice-header-title { font-size: 2rem; font-weight: 700; margin-bottom: 0; }
+        .invoice-header-number { font-size: 1.5rem; font-weight: 300; }
+        
+        .address-title { 
+            font-size: 0.75rem; 
+            text-transform: uppercase; 
+            color: #6c757d; 
+            font-weight: 700; 
+            margin-bottom: 5px; 
+            border-bottom: 1px solid #eee;
+            padding-bottom: 2px;
+        }
+        
+        .address-text { 
+            font-size: 0.9rem; /* Reduced font size for addresses */
+            line-height: 1.4; 
+            white-space: pre-wrap; 
+        }
+        
+        .bank-box {
+            margin-top: 8px;
+            padding: 8px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            border: 1px solid #e9ecef;
+        }
+
         /* Controls Panel */
         .controls { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        
-        /* Helpers */
         .quick-date-btn { font-size: 0.7rem; padding: 2px 6px; margin-right: 2px; margin-bottom: 2px; }
         .hover-bg:hover { background-color: #f8f9fa; }
+        .col-label { font-size: 0.65rem; color: #6c757d; margin-bottom: 2px; display: block; }
         
         /* Hide spinners */
         input[type=number]::-webkit-inner-spin-button, 
-        input[type=number]::-webkit-outer-spin-button { 
-            -webkit-appearance: none; 
-            margin: 0; 
-        }
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         
-        /* Print Rules */
+        /* --- PRINT RULES (The Magic) --- */
         @media print {
+            /* 1. Hide sidebar */
             .no-print { display: none !important; }
-            .invoice-preview { box-shadow: none; padding: 0; margin: 0; width: 100%; }
-            body { background: white; }
+            
+            /* 2. Remove Browser Headers/Footers (Date, URL, Title) */
+            @page { 
+                margin: 0; /* Kills browser headers */
+                size: auto; 
+            }
+            
+            /* 3. Setup Paper Layout */
+            body { 
+                background: white; 
+                margin: 0;
+                padding: 15mm; /* Manual margins so text isn't at edge */
+                -webkit-print-color-adjust: exact; 
+            }
+            
             .container { max-width: 100% !important; width: 100%; padding: 0; margin: 0; }
+            .invoice-preview { box-shadow: none; padding: 0; margin: 0; width: 100%; min-height: auto; }
             .qr-code-box { break-inside: avoid; }
         }
         
@@ -52,13 +92,11 @@
     <div class="row">
         
         <div class="col-md-4 no-print">
-            
             <div class="controls mb-3 border-top border-warning border-3">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <h5 class="m-0">📂 History</h5>
                     <small class="text-muted">{{ savedInvoices.length }} items</small>
                 </div>
-                
                 <div style="max-height: 150px; overflow-y: auto;" class="mb-2">
                     <div v-for="(inv, index) in savedInvoices" :key="index" class="d-flex justify-content-between align-items-center border-bottom py-1 px-1 hover-bg">
                         <div @click="loadInvoice(index)" style="cursor: pointer; flex-grow: 1;">
@@ -73,25 +111,21 @@
 
             <div class="controls mb-3">
                 <h5 class="mb-3">Settings</h5>
-                
                 <div class="form-check form-switch mb-2">
                     <input class="form-check-input" type="checkbox" id="vatSwitch" v-model="isVatPayer">
                     <label class="form-check-label fw-bold small" for="vatSwitch">VAT Payer (Plátce DPH)</label>
                 </div>
-
                 <label class="small text-muted">Document Type</label>
                 <select v-model="docType" class="form-select form-select-sm mb-2">
                     <option value="Faktura">Faktura</option>
                     <option value="Faktura - Daňový doklad" v-if="isVatPayer">Faktura - Daňový doklad</option>
                     <option value="Zálohová faktura">Zálohová faktura (Proforma)</option>
                 </select>
-
                 <label class="small text-muted">Invoice Number</label>
                 <div class="input-group input-group-sm mb-2">
                     <span class="input-group-text">#</span>
                     <input type="text" v-model="invoiceNumber" class="form-control">
                 </div>
-
                 <div class="row g-2 mb-2">
                     <div class="col-6">
                         <label class="small text-muted">Issue Date</label>
@@ -121,7 +155,6 @@
                     <input type="text" v-model="supplier.iban" placeholder="IBAN" class="form-control form-control-sm mb-1">
                     <input type="text" v-model="supplier.swift" placeholder="SWIFT" class="form-control form-control-sm">
                 </div>
-
                 <h5 class="mb-2">Client</h5>
                 <div class="input-group input-group-sm mb-1">
                     <input type="text" v-model="customer.ico" placeholder="Client ICO" class="form-control">
@@ -138,88 +171,69 @@
                         <button @click="removeItem(index)" class="btn btn-sm btn-outline-danger">×</button>
                     </div>
                     <div class="row g-1">
-                        <div class="col-3">
-                            <label class="small text-muted" style="font-size: 10px;">Qty</label>
-                            <input type="number" v-model.number="item.qty" class="form-control form-control-sm">
-                        </div>
-                        <div class="col-3">
-                            <label class="small text-muted" style="font-size: 10px;">Price</label>
-                            <input type="number" v-model.number="item.price" class="form-control form-control-sm">
-                        </div>
-                        
-                        <div class="col-4">
-                            <label class="small text-muted" style="font-size: 10px;">Discount</label>
+                        <div class="col-2"><label class="col-label">Qty</label><input type="number" v-model.number="item.qty" class="form-control form-control-sm px-1 text-center"></div>
+                        <div class="col-2"><label class="col-label">Unit</label><input type="text" v-model="item.unit" class="form-control form-control-sm px-1 text-center" placeholder="ks"></div>
+                        <div class="col-3"><label class="col-label">Price</label><input type="number" v-model.number="item.price" class="form-control form-control-sm px-1"></div>
+                        <div :class="isVatPayer ? 'col-3' : 'col-5'">
+                            <label class="col-label">Discount</label>
                             <div class="input-group input-group-sm">
-                                <input type="number" v-model.number="item.discountVal" class="form-control text-danger" placeholder="0">
-                                <select v-model="item.discountType" class="form-select bg-light" style="max-width: 75px;">
-                                    <option value="percent">%</option>
-                                    <option value="fixed">Kč</option>
-                                </select>
+                                <input type="number" v-model.number="item.discountVal" class="form-control text-danger px-1" placeholder="0">
+                                <select v-model="item.discountType" class="form-select bg-light px-0 text-center" style="max-width: 45px;"><option value="percent">%</option><option value="fixed">Kč</option></select>
                             </div>
                         </div>
-                        
-                        <div class="col-2" v-if="isVatPayer">
-                            <label class="small text-muted" style="font-size: 10px;">VAT</label>
-                            <select v-model.number="item.vat" class="form-select form-select-sm px-1">
-                                <option value="0">0</option>
-                                <option value="12">12</option>
-                                <option value="21">21</option>
-                            </select>
-                        </div>
+                        <div class="col-2" v-if="isVatPayer"><label class="col-label">VAT</label><select v-model.number="item.vat" class="form-select form-select-sm px-0 text-center"><option value="0">0</option><option value="12">12</option><option value="21">21</option></select></div>
                     </div>
                 </div>
                 <button @click="addItem" class="btn btn-sm btn-success w-100 mt-2">+ Add Item</button>
-                
                 <div class="mt-3 border-top pt-2">
                     <label class="small fw-bold">Global Discount (Kč)</label>
                     <input type="number" v-model.number="globalDiscount" class="form-control form-control-sm" placeholder="0">
                 </div>
             </div>
-
             <button onclick="window.print()" class="btn btn-primary w-100 mt-4 fw-bold">🖨 PRINT / PDF</button>
             <div class="mt-4 text-center"><button @click="hardReset" class="btn btn-link text-danger btn-sm" style="font-size: 10px;">Reset App</button></div>
         </div>
 
         <div class="col-md-8">
             <div class="invoice-preview">
-                <div class="d-flex justify-content-between align-items-start mb-5">
-                    <h1 class="display-6 fw-bold">{{ docType }}</h1>
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <h1 class="invoice-header-title">{{ docType }}</h1>
                     <div class="text-end">
-                        <h3 class="fw-light">Číslo: <b>{{ invoiceNumber }}</b></h3>
+                        <h3 class="invoice-header-number">Číslo: <b>{{ invoiceNumber }}</b></h3>
                     </div>
                 </div>
 
                 <div class="row mb-4">
                     <div class="col-6">
-                        <h6 class="text-uppercase text-muted small fw-bold mb-2">Dodavatel</h6>
-                        <div style="white-space: pre-wrap; font-size: 1.1rem;">{{ supplier.details }}</div>
-                        <div v-if="!isVatPayer" class="mt-2 fst-italic text-muted small">Nejsem plátce DPH</div>
-                        <div v-if="supplier.iban" class="mt-3 p-2 bg-light rounded small">
+                        <div class="address-title">Dodavatel</div>
+                        <div class="address-text">{{ supplier.details }}</div>
+                        <div v-if="!isVatPayer" class="mt-1 fst-italic small text-muted">Nejsem plátce DPH</div>
+                        <div v-if="supplier.iban" class="bank-box">
                             <div>IBAN: <b>{{ supplier.iban }}</b></div>
                             <div v-if="supplier.swift">SWIFT: {{ supplier.swift }}</div>
                         </div>
                     </div>
                     <div class="col-6">
-                        <h6 class="text-uppercase text-muted small fw-bold mb-2">Odběratel</h6>
-                        <div style="white-space: pre-wrap; font-size: 1.1rem;">{{ customer.details }}</div>
+                        <div class="address-title">Odběratel</div>
+                        <div class="address-text">{{ customer.details }}</div>
                     </div>
                 </div>
 
-                <div class="row border-top border-bottom py-3 mb-4">
+                <div class="row border-top border-bottom py-2 mb-4">
                     <div class="col-4">
-                        <div class="small text-muted text-uppercase">Datum vystavení</div>
-                        <div class="fw-bold fs-5">{{ formatDate(dates.issued) }}</div>
+                        <div class="small text-muted text-uppercase" style="font-size: 0.7rem;">Datum vystavení</div>
+                        <div class="fw-bold">{{ formatDate(dates.issued) }}</div>
                     </div>
                     <div class="col-4">
-                        <div class="small text-muted text-uppercase">Datum splatnosti</div>
-                        <div class="fw-bold fs-5">{{ formatDate(dates.due) }}</div>
+                        <div class="small text-muted text-uppercase" style="font-size: 0.7rem;">Datum splatnosti</div>
+                        <div class="fw-bold">{{ formatDate(dates.due) }}</div>
                     </div>
                     <div class="col-4">
-                        <div class="small text-muted text-uppercase">Forma úhrady</div>
-                        <div class="fw-bold fs-5">Převodem</div>
+                        <div class="small text-muted text-uppercase" style="font-size: 0.7rem;">Forma úhrady</div>
+                        <div class="fw-bold">Převodem</div>
                     </div>
-                    <div class="col-12 mt-2" v-if="isVatPayer">
-                        <small class="text-muted">DUZP: {{ formatDate(dates.issued) }}</small>
+                    <div class="col-12 mt-1" v-if="isVatPayer">
+                        <small class="text-muted" style="font-size: 0.7rem;">DUZP: {{ formatDate(dates.issued) }}</small>
                     </div>
                 </div>
 
@@ -237,18 +251,14 @@
                     <tbody>
                         <tr v-for="item in items">
                             <td class="ps-3 fw-500">{{ item.name }}</td>
-                            <td class="text-end text-muted">{{ item.qty }} ks</td>
+                            <td class="text-end text-muted">{{ item.qty }} {{ item.unit }}</td>
                             <td class="text-end">{{ formatMoney(item.price) }}</td>
                             <td class="text-end text-danger" v-if="hasItemDiscounts">
-                                <span v-if="item.discountVal > 0">
-                                    -{{ item.discountVal }}{{ item.discountType === 'percent' ? '%' : ' Kč' }}
-                                </span>
+                                <span v-if="item.discountVal > 0">-{{ item.discountVal }}{{ item.discountType === 'percent' ? '%' : ' Kč' }}</span>
                                 <span v-else class="text-muted">-</span>
                             </td>
                             <td class="text-end text-muted" v-if="isVatPayer">{{ item.vat }}%</td>
-                            <td class="text-end fw-bold pe-3">
-                                {{ formatMoney(calcLineTotal(item)) }}
-                            </td>
+                            <td class="text-end fw-bold pe-3">{{ formatMoney(calcLineTotal(item)) }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -265,22 +275,12 @@
                                 <td class="text-danger">Celková sleva:</td>
                                 <td class="text-end text-danger">- {{ formatMoney(globalDiscount) }}</td>
                             </tr>
-                            
                             <template v-if="isVatPayer">
-                                <tr>
-                                    <td class="text-muted">DPH celkem:</td>
-                                    <td class="text-end">{{ formatMoney(totals.vatTotal) }}</td>
-                                </tr>
-                                <tr class="border-top border-dark fs-4 fw-bold">
-                                    <td class="pt-3">Celkem s DPH:</td>
-                                    <td class="text-end pt-3">{{ formatMoney(totals.total) }}</td>
-                                </tr>
+                                <tr><td class="text-muted">DPH celkem:</td><td class="text-end">{{ formatMoney(totals.vatTotal) }}</td></tr>
+                                <tr class="border-top border-dark fs-4 fw-bold"><td class="pt-3">Celkem s DPH:</td><td class="text-end pt-3">{{ formatMoney(totals.total) }}</td></tr>
                             </template>
                             <template v-else>
-                                <tr class="border-top border-dark fs-4 fw-bold">
-                                    <td class="pt-3">Celkem k úhradě:</td>
-                                    <td class="text-end pt-3">{{ formatMoney(totals.total) }}</td>
-                                </tr>
+                                <tr class="border-top border-dark fs-4 fw-bold"><td class="pt-3">Celkem k úhradě:</td><td class="text-end pt-3">{{ formatMoney(totals.total) }}</td></tr>
                             </template>
                         </table>
                     </div>
@@ -296,9 +296,7 @@
                     </div>
                 </div>
 
-                <div class="mt-5 pt-4 border-top text-center text-muted small">
-                    Faktura vystavena elektronicky.
-                </div>
+                <div class="mt-5 pt-4 border-top text-center text-muted small">Faktura vystavena elektronicky.</div>
             </div>
         </div>
     </div>
@@ -306,19 +304,15 @@
 
 <script>
     const { createApp } = Vue;
-
     createApp({
         data() {
             return {
-                isVatPayer: false,
-                docType: 'Faktura', // Default
-                invoiceNumber: new Date().getFullYear() + '001',
+                isVatPayer: false, docType: 'Faktura', invoiceNumber: new Date().getFullYear() + '001',
                 dates: { issued: new Date().toISOString().split('T')[0], due: '' },
                 supplier: { ico: '', details: '', iban: '', swift: '' },
                 customer: { ico: '', details: '' },
-                items: [{ name: 'Služba', qty: 1, price: 1000, discountVal: 0, discountType: 'percent', vat: 0 }],
-                globalDiscount: 0,
-                savedInvoices: []
+                items: [{ name: 'Služba', qty: 1, unit: 'ks', price: 1000, discountVal: 0, discountType: 'percent', vat: 0 }],
+                globalDiscount: 0, savedInvoices: []
             }
         },
         mounted() {
@@ -326,43 +320,21 @@
             try {
                 const get = (k) => { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; };
                 this.savedInvoices = get('app_invoices_v7') || [];
-                
-                const sup = get('app_supplier_v7');
-                if(sup) this.supplier = sup;
-                
-                const vat = localStorage.getItem('app_vat_v7');
-                if(vat !== null) this.isVatPayer = (vat === 'true');
-            } catch(e) { console.error(e); }
+                const sup = get('app_supplier_v7'); if(sup) this.supplier = sup;
+                const vat = localStorage.getItem('app_vat_v7'); if(vat !== null) this.isVatPayer = (vat === 'true');
+            } catch(e) {}
         },
         computed: {
-            hasItemDiscounts() {
-                return this.items.some(i => i.discountVal > 0);
-            },
+            hasItemDiscounts() { return this.items.some(i => i.discountVal > 0); },
             totals() {
-                let subtotal = 0;
-                let vatTotal = 0;
-
+                let subtotal = 0, vatTotal = 0;
                 this.items.forEach(item => {
                     const lineTotal = this.calcLineTotal(item);
                     subtotal += lineTotal;
-                    if (this.isVatPayer) {
-                        vatTotal += lineTotal * (item.vat / 100);
-                    }
+                    if (this.isVatPayer) vatTotal += lineTotal * (item.vat / 100);
                 });
-
-                let total;
-                if (this.isVatPayer) {
-                    total = subtotal + vatTotal - this.globalDiscount;
-                } else {
-                    total = subtotal - this.globalDiscount;
-                    vatTotal = 0;
-                }
-                
-                return {
-                    subtotal: subtotal,
-                    vatTotal: vatTotal,
-                    total: total > 0 ? total : 0
-                };
+                const total = this.isVatPayer ? (subtotal + vatTotal - this.globalDiscount) : (subtotal - this.globalDiscount);
+                return { subtotal, vatTotal, total: total > 0 ? total : 0 };
             },
             qrCodeData() {
                 if (!this.supplier.iban || this.totals.total <= 0) return null;
@@ -379,7 +351,6 @@
             isVatPayer(v) { 
                 localStorage.setItem('app_vat_v7', v); 
                 this.items.forEach(i=>i.vat=v?21:0);
-                // Only auto-switch if current type is generic. Don't force if user selected Zalohova.
                 if(v && this.docType === 'Faktura') this.docType = 'Faktura - Daňový doklad';
                 if(!v && this.docType === 'Faktura - Daňový doklad') this.docType = 'Faktura';
             }
@@ -390,27 +361,15 @@
                 const date = new Date(this.dates.issued); date.setDate(date.getDate()+d);
                 this.dates.due = date.toISOString().split('T')[0];
             },
-            addItem() { 
-                this.items.push({ name: '', qty: 1, price: 0, discountVal: 0, discountType: 'percent', vat: this.isVatPayer?21:0 }); 
-            },
+            addItem() { this.items.push({ name: '', qty: 1, unit: 'ks', price: 0, discountVal: 0, discountType: 'percent', vat: this.isVatPayer?21:0 }); },
             removeItem(i) { this.items.splice(i, 1); },
-            
             calcLineTotal(item) {
-                let unitPrice = item.price;
-                if(item.discountVal > 0) {
-                    if(item.discountType === 'percent') {
-                        unitPrice = unitPrice * (1 - item.discountVal/100);
-                    } else {
-                        unitPrice = unitPrice - item.discountVal;
-                    }
-                }
-                unitPrice = Math.max(0, unitPrice);
-                return item.qty * unitPrice;
+                let p = item.price;
+                if(item.discountVal > 0) { p = item.discountType === 'percent' ? p * (1 - item.discountVal/100) : p - item.discountVal; }
+                return item.qty * Math.max(0, p);
             },
-
             formatMoney(v) { return new Intl.NumberFormat('cs-CZ', { style: 'currency', currency: 'CZK', minimumFractionDigits: 0 }).format(v); },
             formatDate(d) { if(!d) return ''; const [y,m,day] = d.split('-'); return `${day}.${m}.${y}`; },
-            
             async fetchAres(t) {
                 const ico = t==='supplier'?this.supplier.ico:this.customer.ico;
                 try {
@@ -419,25 +378,20 @@
                     const d = await r.json();
                     const txt = `${d.obchodniJmeno}\n${d.sidlo.textovaAdresa}\nIČ: ${ico}` + (d.dic ? `\nDIČ: ${d.dic}` : '');
                     if(t==='supplier') this.supplier.details = txt; else this.customer.details = txt;
-                } catch(e) { alert('ARES Error (CORS or ID). Enter manually.'); }
+                } catch(e) { alert('ARES Error. Enter manually.'); }
             },
-            
             saveInvoiceToHistory() {
                  const snap = { number: this.invoiceNumber, clientName: this.customer.details.split('\n')[0], date: this.dates.issued, fullData: JSON.parse(JSON.stringify({
-                     docType: this.docType, // Save Doc Type!
-                     invoiceNumber: this.invoiceNumber, dates: this.dates, customer: this.customer, items: this.items, globalDiscount: this.globalDiscount
+                     docType: this.docType, invoiceNumber: this.invoiceNumber, dates: this.dates, customer: this.customer, items: this.items, globalDiscount: this.globalDiscount
                  }))};
-                 
                  const idx = this.savedInvoices.findIndex(i => i.number === this.invoiceNumber);
-                 if(idx >= 0) { if(confirm('Overwrite?')) this.savedInvoices[idx] = snap; } 
-                 else this.savedInvoices.unshift(snap);
-                 
+                 if(idx >= 0) { if(confirm('Overwrite?')) this.savedInvoices[idx] = snap; } else this.savedInvoices.unshift(snap);
                  localStorage.setItem('app_invoices_v7', JSON.stringify(this.savedInvoices));
             },
             loadInvoice(i) {
-                const d = this.savedInvoices[i].fullData;
-                Object.assign(this, d);
+                const d = this.savedInvoices[i].fullData; Object.assign(this, d);
                 if(!this.items[0].discountType) this.items.forEach(it => { it.discountType = 'percent'; it.discountVal = 0; });
+                this.items.forEach(it => { if(!it.unit) it.unit = 'ks'; });
             },
             deleteInvoice(i) { this.savedInvoices.splice(i,1); localStorage.setItem('app_invoices_v7', JSON.stringify(this.savedInvoices)); },
             hardReset() { localStorage.clear(); location.reload(); },
