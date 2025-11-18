@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Invoice Maker (v7.2 - Fix UI)</title>
+    <title>Invoice Maker (v7.3 - Type Restored)</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -78,6 +78,13 @@
                     <input class="form-check-input" type="checkbox" id="vatSwitch" v-model="isVatPayer">
                     <label class="form-check-label fw-bold small" for="vatSwitch">VAT Payer (Plátce DPH)</label>
                 </div>
+
+                <label class="small text-muted">Document Type</label>
+                <select v-model="docType" class="form-select form-select-sm mb-2">
+                    <option value="Faktura">Faktura</option>
+                    <option value="Faktura - Daňový doklad" v-if="isVatPayer">Faktura - Daňový doklad</option>
+                    <option value="Zálohová faktura">Zálohová faktura (Proforma)</option>
+                </select>
 
                 <label class="small text-muted">Invoice Number</label>
                 <div class="input-group input-group-sm mb-2">
@@ -176,7 +183,7 @@
         <div class="col-md-8">
             <div class="invoice-preview">
                 <div class="d-flex justify-content-between align-items-start mb-5">
-                    <h1 class="display-6 fw-bold">{{ isVatPayer ? 'Faktura - Daňový doklad' : 'Faktura' }}</h1>
+                    <h1 class="display-6 fw-bold">{{ docType }}</h1>
                     <div class="text-end">
                         <h3 class="fw-light">Číslo: <b>{{ invoiceNumber }}</b></h3>
                     </div>
@@ -222,9 +229,7 @@
                             <th scope="col" class="border-0 ps-3">Položka</th>
                             <th scope="col" class="text-end border-0">Množství</th>
                             <th scope="col" class="text-end border-0">Cena/j.</th>
-                            
                             <th scope="col" class="text-end border-0" v-if="hasItemDiscounts">Sleva</th>
-                            
                             <th scope="col" class="text-end border-0" v-if="isVatPayer">DPH</th>
                             <th scope="col" class="text-end border-0 pe-3">Celkem</th>
                         </tr>
@@ -234,14 +239,12 @@
                             <td class="ps-3 fw-500">{{ item.name }}</td>
                             <td class="text-end text-muted">{{ item.qty }} ks</td>
                             <td class="text-end">{{ formatMoney(item.price) }}</td>
-                            
                             <td class="text-end text-danger" v-if="hasItemDiscounts">
                                 <span v-if="item.discountVal > 0">
                                     -{{ item.discountVal }}{{ item.discountType === 'percent' ? '%' : ' Kč' }}
                                 </span>
                                 <span v-else class="text-muted">-</span>
                             </td>
-                            
                             <td class="text-end text-muted" v-if="isVatPayer">{{ item.vat }}%</td>
                             <td class="text-end fw-bold pe-3">
                                 {{ formatMoney(calcLineTotal(item)) }}
@@ -308,6 +311,7 @@
         data() {
             return {
                 isVatPayer: false,
+                docType: 'Faktura', // Default
                 invoiceNumber: new Date().getFullYear() + '001',
                 dates: { issued: new Date().toISOString().split('T')[0], due: '' },
                 supplier: { ico: '', details: '', iban: '', swift: '' },
@@ -375,6 +379,9 @@
             isVatPayer(v) { 
                 localStorage.setItem('app_vat_v7', v); 
                 this.items.forEach(i=>i.vat=v?21:0);
+                // Only auto-switch if current type is generic. Don't force if user selected Zalohova.
+                if(v && this.docType === 'Faktura') this.docType = 'Faktura - Daňový doklad';
+                if(!v && this.docType === 'Faktura - Daňový doklad') this.docType = 'Faktura';
             }
         },
         methods: {
@@ -417,6 +424,7 @@
             
             saveInvoiceToHistory() {
                  const snap = { number: this.invoiceNumber, clientName: this.customer.details.split('\n')[0], date: this.dates.issued, fullData: JSON.parse(JSON.stringify({
+                     docType: this.docType, // Save Doc Type!
                      invoiceNumber: this.invoiceNumber, dates: this.dates, customer: this.customer, items: this.items, globalDiscount: this.globalDiscount
                  }))};
                  
