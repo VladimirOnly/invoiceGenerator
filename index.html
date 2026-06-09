@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Business Document Manager (v9.0 - All-in-One)</title>
+    <title>Business Document Manager (v10.0 - Clickable Links)</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -44,7 +44,8 @@
             border: 1px solid #e9ecef;
         }
 
-        .item-thumbnail { width: 60px; height: 60px; object-fit: contain; border-radius: 4px; border: 1px solid #dee2e6; background: #fff; }
+        .item-thumbnail { width: 60px; height: 60px; object-fit: contain; border-radius: 4px; border: 1px solid #dee2e6; background: #fff; transition: transform 0.2s; }
+        a:hover .item-thumbnail { transform: scale(1.05); border-color: #0d6efd; }
         .item-desc { font-size: 0.8rem; color: #6c757d; white-space: pre-wrap; margin-top: 2px; }
 
         /* Controls Panel */
@@ -65,6 +66,10 @@
             .invoice-preview { box-shadow: none; padding: 0; margin: 0; width: 100%; min-height: auto; }
             .qr-code-box { break-inside: avoid; }
             tr { page-break-inside: avoid; }
+            
+            /* Предотвращаем печать ссылок в скобках (особенность Bootstrap при печати) */
+            a { text-decoration: none !important; color: inherit !important; }
+            a[href]::after { content: none !important; }
         }
         
         [v-cloak] { display: none; }
@@ -75,6 +80,7 @@
 <div id="app" class="container py-4" v-cloak>
     <div class="row">
         
+        <!-- ЛЕВАЯ ПАНЕЛЬ НАСТРОЕК -->
         <div class="col-md-4 no-print">
             <div class="controls mb-3 border-top border-primary border-3">
                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -174,10 +180,14 @@
                     
                     <textarea v-if="docType === 'Cenová nabídka'" v-model="item.desc" class="form-control form-control-sm mb-1 text-muted" rows="2" placeholder="Technické parametry / popis..."></textarea>
                     
-                    <div v-if="docType === 'Cenová nabídka'" class="mb-2 p-1 border rounded bg-white">
-                        <label class="col-label text-primary">Obrázek (Soubor nebo URL z webu)</label>
+                    <!-- Ссылка на сайт и Фото для предложений -->
+                    <div v-if="docType === 'Cenová nabídka'" class="mb-2 p-2 border rounded bg-white">
+                        <label class="col-label text-primary">🌐 Odkaz na produkt na webu</label>
+                        <input type="text" v-model="item.url" class="form-control form-control-sm mb-2" placeholder="Např. https://iseeyou24.cz/kamera..." style="font-size: 0.75rem;">
+                        
+                        <label class="col-label text-primary">Obrázek (Soubor nebo URL)</label>
                         <input type="file" accept="image/*" @change="onImageUpload($event, item)" class="form-control form-control-sm mb-1" style="font-size: 0.65rem;">
-                        <input type="text" v-model="item.image" class="form-control form-control-sm" placeholder="Nebo vložte URL adresu obrázku..." style="font-size: 0.75rem;">
+                        <input type="text" v-model="item.image" class="form-control form-control-sm" placeholder="Nebo vložte URL obrázku..." style="font-size: 0.75rem;">
                     </div>
 
                     <div class="row g-1">
@@ -211,19 +221,23 @@
             <div class="mt-4 text-center"><button @click="hardReset" class="btn btn-link text-danger btn-sm" style="font-size: 10px;">Resetovat aplikaci</button></div>
         </div>
 
+        <!-- ПРАВАЯ ПАНЕЛЬ: ИНТЕРАКТИВНЫЙ ПРОСМОТР ДОКУМЕНТА -->
         <div class="col-md-8">
             <div class="invoice-preview">
                 
+                <!-- Шапка документа -->
                 <div class="d-flex justify-content-between align-items-start mb-3">
                     <div>
                         <h1 class="invoice-header-title">{{ docType }}</h1>
-                        <small class="text-primary fw-bold" v-if="supplier.details.includes('iseeyou24.cz')">🌐 www.iseeyou24.cz</small>
+                        <!-- Кликабельная ссылка на сайт в шапке -->
+                        <a v-if="supplier.details.includes('iseeyou24.cz')" href="https://www.iseeyou24.cz" target="_blank" class="text-primary fw-bold text-decoration-none">🌐 www.iseeyou24.cz</a>
                     </div>
                     <div class="text-end">
                         <h3 class="invoice-header-number">Číslo: <b>{{ invoiceNumber }}</b></h3>
                     </div>
                 </div>
 
+                <!-- Контрагенты -->
                 <div class="row mb-4">
                     <div class="col-6">
                         <div class="address-title">Dodavatel</div>
@@ -241,6 +255,7 @@
                     </div>
                 </div>
 
+                <!-- Временные метки -->
                 <div class="row border-top border-bottom py-2 mb-4">
                     <div class="col-4">
                         <div class="small text-muted text-uppercase" style="font-size: 0.7rem;">Datum vystavení</div>
@@ -259,6 +274,7 @@
                     </div>
                 </div>
 
+                <!-- Таблица позиций -->
                 <table class="table table-hover align-middle mb-4">
                     <thead class="table-light">
                         <tr>
@@ -273,13 +289,25 @@
                     </thead>
                     <tbody>
                         <tr v-for="item in items">
+                            <!-- Колонка Фото (только для Cenová nabídka) -->
                             <td class="ps-3" v-if="docType === 'Cenová nabídka'">
-                                <img v-if="item.image" :src="item.image" class="item-thumbnail">
+                                <template v-if="item.image">
+                                    <a v-if="item.url" :href="item.url" target="_blank" title="Otevřít na webu">
+                                        <img :src="item.image" class="item-thumbnail">
+                                    </a>
+                                    <img v-else :src="item.image" class="item-thumbnail">
+                                </template>
                                 <div v-else class="item-thumbnail d-flex align-items-center justify-content-center text-muted bg-light" style="font-size: 0.55rem; border: 1px dashed #ccc;">Bez fota</div>
                             </td>
                             
                             <td>
-                                <div class="fw-bold">{{ item.name }}</div>
+                                <!-- Кликабельное название товара, если есть ссылка -->
+                                <div class="fw-bold">
+                                    <a v-if="item.url && docType === 'Cenová nabídka'" :href="item.url" target="_blank" class="text-primary text-decoration-none" title="Otevřít na webu">
+                                        {{ item.name }} <span style="font-size: 0.8em;">🔗</span>
+                                    </a>
+                                    <span v-else>{{ item.name }}</span>
+                                </div>
                                 <div class="item-desc" v-if="docType === 'Cenová nabídka' && item.desc">{{ item.desc }}</div>
                             </td>
                             <td class="text-end text-muted">{{ item.qty }} {{ item.unit }}</td>
@@ -294,6 +322,7 @@
                     </tbody>
                 </table>
 
+                <!-- Блок Итогов -->
                 <div class="row">
                     <div class="col-6"></div>
                     <div class="col-6">
@@ -320,11 +349,13 @@
                     </div>
                 </div>
 
+                <!-- Подсловия для коммерческих предложений -->
                 <div v-if="docType === 'Cenová nabídka' && notes" class="mt-4 p-3 bg-light rounded" style="border-left: 4px solid #0d6efd; font-size: 0.85rem;">
                     <div class="fw-bold text-uppercase small text-muted mb-1">Podmínky nabídky:</div>
                     <div style="white-space: pre-wrap;">{{ notes }}</div>
                 </div>
 
+                <!-- QR код (только для счетов) -->
                 <div class="qr-code-box mt-4 d-flex align-items-center justify-content-end" v-if="shouldShowQR">
                     <div class="me-3 text-end text-muted small lh-1">
                         <div>QR Platba</div>
@@ -350,7 +381,7 @@
                 dates: { issued: new Date().toISOString().split('T')[0], due: '' },
                 supplier: { ico: '', details: '', iban: '', swift: '' },
                 customer: { ico: '', details: '' },
-                items: [{ name: 'Služba / Položka', desc: '', qty: 1, unit: 'ks', price: 1000, discountVal: 0, discountType: 'percent', vat: 0, image: null }],
+                items: [{ name: 'Služba / Položka', desc: '', qty: 1, unit: 'ks', price: 1000, discountVal: 0, discountType: 'percent', vat: 0, image: null, url: '' }],
                 globalDiscount: 0, savedInvoices: [],
                 notes: "Platnost této nabídky je omezena na výše uvedený termín.\nZáruka na dodané zařízení: 24 měsíců.\nMontážní práce a spotřební materiál budou účtovány dle skutečného rozsahu."
             }
@@ -419,7 +450,7 @@
                 const date = new Date(this.dates.issued); date.setDate(date.getDate() + d);
                 this.dates.due = date.toISOString().split('T')[0];
             },
-            addItem() { this.items.push({ name: '', desc: '', qty: 1, unit: 'ks', price: 0, discountVal: 0, discountType: 'percent', vat: this.isVatPayer ? 21 : 0, image: null }); },
+            addItem() { this.items.push({ name: '', desc: '', qty: 1, unit: 'ks', price: 0, discountVal: 0, discountType: 'percent', vat: this.isVatPayer ? 21 : 0, image: null, url: '' }); },
             removeItem(i) { this.items.splice(i, 1); },
             calcLineTotal(item) {
                 let p = item.price;
@@ -465,12 +496,13 @@
             },
             loadInvoice(i) {
                 const d = this.savedInvoices[i].fullData; Object.assign(this, d);
-                // Накатываем структуру полей для старых записей, если чего-то не хватает
+                // Накатываем структуру полей для старых записей
                 this.items.forEach(it => {
                     if(!it.discountType) { it.discountType = 'percent'; it.discountVal = 0; }
                     if(!it.unit) it.unit = 'ks';
                     if(!it.desc) it.desc = '';
                     if(!it.image) it.image = null;
+                    if(!it.url) it.url = '';
                 });
             },
             deleteInvoice(i) { this.savedInvoices.splice(i,1); localStorage.setItem('app_docs_v9', JSON.stringify(this.savedInvoices)); },
