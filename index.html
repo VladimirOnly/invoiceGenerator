@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Business Document Manager (v10.0 - Clickable Links)</title>
+    <title>Business Document Manager (v11.0 - CZ Account Format)</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -37,10 +37,10 @@
         
         .bank-box {
             margin-top: 8px;
-            padding: 8px;
+            padding: 10px;
             background-color: #f8f9fa;
             border-radius: 4px;
-            font-size: 0.85rem;
+            font-size: 0.95rem;
             border: 1px solid #e9ecef;
         }
 
@@ -156,7 +156,13 @@
                 <textarea v-model="supplier.details" rows="3" class="form-control form-control-sm mb-2" placeholder="Podrobnosti dodavatele..."></textarea>
                 
                 <div v-if="paymentMethod === 'Převodem'" class="bg-light p-2 rounded border mb-3">
-                    <input type="text" v-model="supplier.iban" placeholder="IBAN" class="form-control form-control-sm mb-1">
+                    <label class="col-label">Číslo účtu (český formát)</label>
+                    <input type="text" v-model="supplier.czAccount" placeholder="např. 123456789/0300" class="form-control form-control-sm mb-2">
+                    
+                    <label class="col-label">IBAN (nutný pro QR platbu)</label>
+                    <input type="text" v-model="supplier.iban" placeholder="CZ..." class="form-control form-control-sm mb-1">
+                    
+                    <label class="col-label">SWIFT (volitelné)</label>
                     <input type="text" v-model="supplier.swift" placeholder="SWIFT" class="form-control form-control-sm">
                 </div>
                 
@@ -245,8 +251,10 @@
                         <div v-if="!isVatPayer" class="mt-1 fst-italic small text-muted">Nejsem plátce DPH</div>
                         
                         <div v-if="shouldShowBankInfo" class="bank-box">
-                            <div>Číslo účtu / IBAN: <b>{{ supplier.iban }}</b></div>
-                            <div v-if="supplier.swift">SWIFT: {{ supplier.swift }}</div>
+                            <div v-if="supplier.czAccount">Číslo účtu: <b>{{ supplier.czAccount }}</b></div>
+                            <div v-if="supplier.iban" class="small text-muted mt-1" style="font-size: 0.75rem;">
+                                IBAN: {{ supplier.iban }} <span v-if="supplier.swift">| SWIFT: {{ supplier.swift }}</span>
+                            </div>
                         </div>
                     </div>
                     <div class="col-6">
@@ -379,7 +387,13 @@
             return {
                 isVatPayer: false, docType: 'Faktura', paymentMethod: 'Převodem', invoiceNumber: new Date().getFullYear() + '001',
                 dates: { issued: new Date().toISOString().split('T')[0], due: '' },
-                supplier: { ico: '', details: '', iban: '', swift: '' },
+                supplier: { 
+                    ico: '', 
+                    details: "DATATELEKOM.CZ s.r.o.\nS. K. Neumanna 2005/8, Libeň, 182 00 Praha 8\nIČ: 09707204\nDIČ: CZ09707204", 
+                    czAccount: '3508386016/3030', 
+                    iban: 'CZ8630300000003508386016', 
+                    swift: 'AIRACZPP' 
+                },
                 customer: { ico: '', details: '' },
                 items: [{ name: 'Služba / Položka', desc: '', qty: 1, unit: 'ks', price: 1000, discountVal: 0, discountType: 'percent', vat: 0, image: null, url: '' }],
                 globalDiscount: 0, savedInvoices: [],
@@ -391,7 +405,12 @@
             try {
                 const get = (k) => { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; };
                 this.savedInvoices = get('app_docs_v9') || [];
-                const sup = get('app_supplier_v9'); if(sup) this.supplier = sup;
+                const sup = get('app_supplier_v9'); 
+                if(sup) {
+                    this.supplier = sup;
+                    // Восстанавливаем czAccount для старых сохранений
+                    if(this.supplier.czAccount === undefined) this.supplier.czAccount = '3508386016/3030';
+                }
                 const vat = localStorage.getItem('app_vat_v9'); if(vat !== null) this.isVatPayer = (vat === 'true');
                 const notes = localStorage.getItem('app_notes_v9'); if(notes) this.notes = notes;
             } catch(e) {}
@@ -409,7 +428,7 @@
                 return 'Celkem k úhradě:';
             },
             shouldShowBankInfo() {
-                return this.docType !== 'Objednávka' && this.docType !== 'Cenová nabídka' && this.paymentMethod === 'Převodem' && this.supplier.iban;
+                return this.docType !== 'Objednávka' && this.docType !== 'Cenová nabídka' && this.paymentMethod === 'Převodem' && (this.supplier.czAccount || this.supplier.iban);
             },
             shouldShowQR() {
                 return this.docType !== 'Objednávka' && this.docType !== 'Cenová nabídka' && this.paymentMethod === 'Převodem' && this.supplier.iban && this.totals.total > 0;
