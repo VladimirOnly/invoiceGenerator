@@ -526,7 +526,7 @@
             },
             deleteInvoice(i) { this.savedInvoices.splice(i,1); localStorage.setItem('app_docs_v9', JSON.stringify(this.savedInvoices)); },
             hardReset() { localStorage.clear(); location.reload(); },
-            genQR(v) { if(typeof QRious !== 'undefined') new QRious({ element: document.getElementById('qrCanvas'), value: v, size: 100 }); }
+            genQR(v) { if(typeof QRious !== 'undefined') new QRious({ element: document.getElementById('qrCanvas'), value: v, size: 150 }); }
         }
     }).mount('#app');
 </script>
